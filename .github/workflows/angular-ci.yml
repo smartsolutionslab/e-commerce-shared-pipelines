@@ -1,0 +1,70 @@
+name: Angular CI Pipeline
+
+on:
+  workflow_call:
+    inputs:
+      node-version:
+        required: false
+        type: string
+        default: '20.x'
+      run-tests:
+        required: false
+        type: boolean
+        default: true
+      run-e2e:
+        required: false
+        type: boolean
+        default: false
+      working-directory:
+        required: false
+        type: string
+        default: '.'
+
+jobs:
+  build-and-test:
+    runs-on: ubuntu-latest
+    
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v4
+
+    - name: Setup Node.js
+      uses: actions/setup-node@v4
+      with:
+        node-version: ${{ inputs.node-version }}
+        cache: 'npm'
+        cache-dependency-path: ${{ inputs.working-directory }}/package-lock.json
+
+    - name: Install dependencies
+      run: npm ci
+      working-directory: ${{ inputs.working-directory }}
+
+    - name: Run linting
+      run: npm run lint
+      working-directory: ${{ inputs.working-directory }}
+
+    - name: Run unit tests
+      if: ${{ inputs.run-tests }}
+      run: npm run test:ci
+      working-directory: ${{ inputs.working-directory }}
+
+    - name: Build application
+      run: npm run build:prod
+      working-directory: ${{ inputs.working-directory }}
+
+    - name: Run e2e tests
+      if: ${{ inputs.run-e2e }}
+      run: npm run e2e:ci
+      working-directory: ${{ inputs.working-directory }}
+
+    - name: Upload coverage reports
+      if: ${{ inputs.run-tests }}
+      uses: codecov/codecov-action@v3
+      with:
+        directory: ${{ inputs.working-directory }}/coverage
+
+    - name: Upload build artifacts
+      uses: actions/upload-artifact@v3
+      with:
+        name: build-artifacts
+        path: ${{ inputs.working-directory }}/dist/
