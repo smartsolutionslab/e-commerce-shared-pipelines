@@ -56,108 +56,19 @@ env:
   IMAGE_NAME: ${{ github.repository }}
 
 jobs:
-  version:
-    runs-on: ubuntu-latest
-    outputs:
-      version: ${{ steps.gitversion.outputs.semVer }}
-      docker-tag: ${{ steps.gitversion.outputs.semVer }}
-      is-release: ${{ steps.gitversion.outputs.branchName == 'main' }}
-    
-    steps:
-    - name: Checkout code
-      uses: actions/checkout@v5
-      with:
-        fetch-depth: 0
-
-    - name: Install GitVersion
-      uses: gittools/actions/gitversion/setup@v4.1.0
-      with:
-        versionSpec: '6.3.x'
-
-    - name: Determine Version
-      id: gitversion
-      uses: gittools/actions/gitversion/execute@v4.1.0
-
-  setup-nuget:
-    runs-on: ubuntu-latest
-    if: ${{ inputs.requires-github-packages }}
-    
-    steps:
-    - name: Checkout code
-      uses: actions/checkout@v5
-
-    - name: Setup authenticated nuget.config
-      run: |
-        if [ -f "nuget.config" ]; then
-          sed -i "s/YOUR_USERNAME/${{ github.repository_owner }}/g" nuget.config
-          sed -i "s/USERNAME_PLACEHOLDER/${{ github.actor }}/g" nuget.config
-          sed -i "s/TOKEN_PLACEHOLDER/${{ secrets.GITHUB_TOKEN }}/g" nuget.config
-        else
-          cat > nuget.config << EOF
-        <?xml version="1.0" encoding="utf-8"?>
-        <configuration>
-          <packageSources>
-            <add key="nuget.org" value="https://api.nuget.org/v3/index.json" protocolVersion="3" />
-            <add key="github" value="https://nuget.pkg.github.com/${{ github.repository_owner }}/index.json" />
-          </packageSources>
-          <packageSourceCredentials>
-            <github>
-              <add key="Username" value="${{ github.actor }}" />
-              <add key="ClearTextPassword" value="${{ secrets.GITHUB_TOKEN }}" />
-            </github>
-          </packageSourceCredentials>
-        </configuration>
-        EOF
-        fi
-
-    - name: Upload nuget.config artifact
-      uses: actions/upload-artifact@v4
-      with:
-        name: nuget-config-${{ github.run_id }}
-        path: nuget.config
-        retention-days: 1
-
-  build-and-test:
-    runs-on: ubuntu-latest
-    needs: [version, setup-nuget]
-    if: always() && (needs.setup-nuget.result == 'success' || needs.setup-nuget.result == 'skipped')
-    
-    steps:
-    - name: Checkout code
-      uses: actions/checkout@v5
-
-    - name: Download nuget.config
-      if: ${{ inputs.requires-github-packages }}
-      uses: actions/download-artifact@v4
-      with:
-        name: nuget-config-${{ github.run_id }}
-
-    - name: Setup .NET
-      uses: actions/setup-dotnet@v4
-      with:
-        dotnet-version: ${{ inputs.dotnet-version }}
-
-    - name: Cache NuGet packages
-      uses: actions/cache@v4
-      with:
-        path: ~/.nuget/packages
-        key: ${{ runner.os }}-nuget-${{ hashFiles('**/*.csproj') }}
-        restore-keys: |
-          ${{ runner.os }}-nuget-
-
-    - name: Restore dependencies
-      run: dotnet restore
-
-    - name: Build solution
-      run: dotnet build --no-restore --configuration ${{ inputs.build-configuration }} -p:Version=${{ needs.version.outputs.version }}
-
-    - name: Run unit tests
-      if: ${{ inputs.run-tests }}
-      run: dotnet test --no-build --configuration ${{ inputs.build-configuration }} --verbosity normal --filter "Category!=Integration"
+  base-pipeline:
+    uses: ./.github/workflows/dotnet-base.yml
+    with:
+      dotnet-version: ${{ inputs.dotnet-version }}
+      run-tests: ${{ inputs.run-tests }}
+      run-security-scan: ${{ inputs.run-security-scan }}
+      build-configuration: ${{ inputs.build-configuration }}
+      requires-github-packages: ${{ inputs.requires-github-packages }}
+    secrets: inherit
 
   integration-test:
     runs-on: ubuntu-latest
-    needs: setup-nuget
+    needs: base-pipeline
     if: ${{ inputs.run-integration-tests && github.event_name == 'push' }}
     
     services:
@@ -216,12 +127,101 @@ jobs:
       env:
         ConnectionStrings__DefaultConnection: "Server=localhost,1433;Database=ECommerce_${{ inputs.service-name }}_Test;User Id=sa;Password=YourStrong!Passw0rd;TrustServerCertificate=true;Encrypt=false"
 
-  security-scan:
+  build-docker:
     runs-on: ubuntu-latest
-    if: ${{ inputs.run-security-scan }}
+    needs: base-pipeline
+    if: ${{ inputs.build-docker && github.event_name == 'push' }}
     
+    permissions:
+      contents: read
+      packages: write
+
     steps:
     - name: Checkout code
+      uses: actions/checkout@v5
+
+    - name: Download nuget.config
+      if: ${{ inputs.requires-github-packages }}
+      uses: actions/download-artifact@v4
+      with:
+        name: nuget-config-${{ github.run_id }}
+
+    - name: Set up Docker Buildx
+      uses: docker/setup-buildx-action@v3
+
+    - name: Log in to Container Registry
+      uses: docker/login-action@v3
+      with:
+        registry: ${{ env.REGISTRY }}
+        username: ${{ github.actor }}
+        password: ${{ secrets.GITHUB_TOKEN }}
+
+    - name: Extract metadata
+      id: meta
+      uses: docker/metadata-action@v5
+      with:
+        images: ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}
+        tags: |
+          type=raw,value=${{ needs.version.outputs.docker-tag }}
+          type=raw,value=latest,enable={{is_default_branch}}
+
+    - name: Build and push Docker image
+      uses: docker/build-push-action@v5
+      with:
+        context: .
+        file: ./Dockerfile
+        push: true
+        tags: ${{ steps.meta.outputs.tags }}
+        labels: ${{ steps.meta.outputs.labels }}
+        cache-from: type=gha
+        cache-to: type=gha,mode=max
+
+  deploy-dev:
+    runs-on: ubuntu-latest
+    needs: build-docker
+    if: ${{ inputs.deploy-to-dev }}
+    environment: development
+    
+    steps:
+    - name: Deploy ${{ inputs.service-name }} to Development
+      run: |
+        echo "🚀 Deploying ${{ inputs.service-name }} to Development"
+        echo "Image: ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:${{ needs.version.outputs.docker-tag }}"
+
+  deploy-prod:
+    runs-on: ubuntu-latest  
+    needs: build-docker
+    if: ${{ inputs.deploy-to-prod }}
+    environment: production
+    
+    steps:
+    - name: Deploy ${{ inputs.service-name }} to Production
+      run: |
+        echo "🚀 Deploying ${{ inputs.service-name }} to Production"
+        echo "Image: ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:latest"
+        push: true
+        tags: ${{ steps.meta.outputs.tags }}
+        labels: ${{ steps.meta.outputs.labels }}
+        cache-from: type=gha
+        cache-to: type=gha,mode=max
+
+  create-release:
+    runs-on: ubuntu-latest
+    needs: [base-pipeline, build-docker]
+    if: ${{ needs.base-pipeline.outputs.is-release == 'true' && github.event_name == 'push' && github.ref == 'refs/heads/main' }}
+    
+    permissions:
+      contents: write
+
+    steps:
+    - name: Create GitHub Release and Tag
+      run: |
+        gh release create v${{ needs.base-pipeline.outputs.version }} \
+          --title "Release v${{ needs.base-pipeline.outputs.version }}" \
+          --notes "Auto-generated release for ${{ inputs.service-name }}" \
+          --generate-notes
+      env:
+        GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
       uses: actions/checkout@v5
 
     - name: Run Trivy vulnerability scanner
@@ -315,3 +315,21 @@ jobs:
         labels: ${{ steps.meta.outputs.labels }}
         cache-from: type=gha
         cache-to: type=gha,mode=max
+
+  create-release:
+    runs-on: ubuntu-latest
+    needs: [version, build-docker]
+    if: ${{ needs.version.outputs.is-release == 'true' && github.event_name == 'push' && github.ref == 'refs/heads/main' }}
+    
+    permissions:
+      contents: write
+
+    steps:
+    - name: Create GitHub Release and Tag
+      run: |
+        gh release create v${{ needs.version.outputs.version }} \
+          --title "Release v${{ needs.version.outputs.version }}" \
+          --notes "Auto-generated release for ${{ inputs.service-name }} v${{ needs.version.outputs.version }}" \
+          --generate-notes
+      env:
+        GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
