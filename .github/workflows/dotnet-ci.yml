@@ -1,8 +1,11 @@
-name: .NET CI Pipeline
+name: Reusable .NET CI Pipeline
 
 on:
   workflow_call:
     inputs:
+      service-name:
+        required: true
+        type: string
       dotnet-version:
         required: false
         type: string
@@ -11,146 +14,41 @@ on:
         required: false
         type: boolean
         default: true
+      run-integration-tests:
+        required: false
+        type: boolean
+        default: false
       run-security-scan:
         required: false
         type: boolean
-        default: true
+        default: false
       build-configuration:
         required: false
         type: string
         default: 'Release'
-      working-directory:
+      database-type:
         required: false
         type: string
-        default: '.'
+        default: 'mssql'
+      requires-github-packages:
+        required: false
+        type: boolean
+        default: false
 
 jobs:
-  build-and-test:
-    runs-on: ubuntu-latest
-    
-    services:
-      sql-server:
-        image: mcr.microsoft.com/mssql/server:2022-latest
-        env:
-          SA_PASSWORD: Password123!
-          ACCEPT_EULA: Y
-        ports:
-          - 1433:1433
-        options: >-
-          --health-cmd="/opt/mssql-tools/bin/sqlcmd -S localhost -U sa -P Password123! -Q 'SELECT 1'"
-          --health-interval=10s
-          --health-timeout=5s
-          --health-retries=3
-
-    steps:
-    - name: Checkout code
-      uses: actions/checkout@v4
-
-    - name: Setup .NET
-      uses: actions/setup-dotnet@v4
-      with:
-        dotnet-version: ${{ inputs.dotnet-version }}
-
-    - name: Cache NuGet packages
-      uses: actions/cache@v3
-      with:
-        path: ~/.nuget/packages
-        key: ${{ runner.os }}-nuget-${{ hashFiles('**/*.csproj') }}
-        restore-keys: |
-          ${{ runner.os }}-nuget-
-
-    - name: Restore dependencies
-      run: dotnet restore
-      working-directory: ${{ inputs.working-directory }}
-
-    - name: Build
-      run: dotnet build --no-restore --configuration ${{ inputs.build-configuration }}
-      working-directory: ${{ inputs.working-directory }}
-
-    - name: Run unit tests
-      if: ${{ inputs.run-tests }}
-      run: |
-        dotnet test --no-build --configuration ${{ inputs.build-configuration }} \
-          --verbosity normal \
-          --collect:"XPlat Code Coverage" \
-          --results-directory ./coverage \
-          --logger trx \
-          --logger "console;verbosity=detailed"
-      working-directory: ${{ inputs.working-directory }}
-      env:
-        ConnectionStrings__DefaultConnection: "Server=localhost,1433;Database=TestDb;User Id=sa;Password=Password123!;TrustServerCertificate=true"
-
-    - name: Upload test results
-      uses: dorny/test-reporter@v1
-      if: always() && inputs.run-tests
-      with:
-        name: .NET Tests
-        path: '**/TestResults/*.trx'
-        reporter: dotnet-trx
-
-    - name: Upload coverage to Codecov
-      if: ${{ inputs.run-tests }}
-      uses: codecov/codecov-action@v3
-      with:
-        directory: ./coverage
-        fail_ci_if_error: false
-
-  security-scan:
-    runs-on: ubuntu-latest
-    if: ${{ inputs.run-security-scan }}
-    
-    steps:
-    - name: Checkout code
-      uses: actions/checkout@v4
-
-    - name: Run Trivy vulnerability scanner
-      uses: aquasecurity/trivy-action@master
-      with:
-        scan-type: 'fs'
-        scan-ref: ${{ inputs.working-directory }}
-        format: 'sarif'
-        output: 'trivy-results.sarif'
-
-    - name: Upload Trivy scan results
-      uses: github/codeql-action/upload-sarif@v3
-      with:
-        sarif_file: 'trivy-results.sarif'
-
-  code-quality:
-    runs-on: ubuntu-latest
-    
-    steps:
-    - name: Checkout code
-      uses: actions/checkout@v4
-      with:
-        fetch-depth: 0
-
-    - name: Setup .NET
-      uses: actions/setup-dotnet@v4
-      with:
-        dotnet-version: ${{ inputs.dotnet-version }}
-
-    - name: Install SonarCloud scanner
-      run: dotnet tool install --global dotnet-sonarscanner
-
-    - name: Begin SonarCloud analysis
-      env:
-        GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-        SONAR_TOKEN: ${{ secrets.SONAR_TOKEN }}
-      run: |
-        dotnet sonarscanner begin \
-          /k:"${{ github.repository_owner }}_${{ github.event.repository.name }}" \
-          /o:"${{ github.repository_owner }}" \
-          /d:sonar.login="${{ secrets.SONAR_TOKEN }}" \
-          /d:sonar.host.url="https://sonarcloud.io" \
-          /d:sonar.cs.opencover.reportsPaths="**/coverage.opencover.xml"
-
-    - name: Build for analysis
-      run: dotnet build --configuration ${{ inputs.build-configuration }}
-      working-directory: ${{ inputs.working-directory }}
-
-    - name: End SonarCloud analysis
-      env:
-        GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-        SONAR_TOKEN: ${{ secrets.SONAR_TOKEN }}
-      run: dotnet sonarscanner end /d:sonar.login="${{ secrets.SONAR_TOKEN }}"
+  ci:
+    uses: ./.github/workflows/dotnet-microservice-full.yml
+    with:
+      service-name: ${{ inputs.service-name }}
+      dotnet-version: ${{ inputs.dotnet-version }}
+      run-tests: ${{ inputs.run-tests }}
+      run-integration-tests: ${{ inputs.run-integration-tests }}
+      run-security-scan: ${{ inputs.run-security-scan }}
+      build-configuration: ${{ inputs.build-configuration }}
+      database-type: ${{ inputs.database-type }}
+      requires-github-packages: ${{ inputs.requires-github-packages }}
+      build-docker: false
+      deploy-to-dev: false
+      deploy-to-prod: false
+    secrets: inherit
+  
