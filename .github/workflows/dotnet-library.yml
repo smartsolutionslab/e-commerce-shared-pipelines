@@ -175,11 +175,11 @@ jobs:
 
     steps:
     - name: Create GitHub Release
-      uses: actions/create-release@v1
+      run: |
+        gh release create v${{ needs.version.outputs.version }} \
+          --title "Release v${{ needs.version.outputs.version }}" \
+          --notes "Auto-generated release for ${{ inputs.library-name }} v${{ needs.version.outputs.version }}" \
+          --generate-notes
       env:
         GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-      with:
-        tag_name: v${{ needs.version.outputs.version }}
-        release_name: Release v${{ needs.version.outputs.version }}
-        draft: false
-        prerelease: false
+        token: ${{ secrets.GITHUB_TOKEN }}
