@@ -39,7 +39,7 @@ jobs:
       nuget-version: ${{ steps.gitversion.outputs.nuGetVersionV2 }}
       is-release: ${{ steps.gitversion.outputs.branchName == 'main' }}
       is-prerelease: ${{ steps.gitversion.outputs.branchName != 'main' }}
-    
+      
     steps:
     - name: Checkout code
       uses: actions/checkout@v5
@@ -54,8 +54,6 @@ jobs:
     - name: Determine Version
       id: gitversion
       uses: gittools/actions/gitversion/execute@v4.1.0
-      with:
-        additionalArguments: '/config mode=ContinuousDelivery /config branches.main.tag= /config branches.main.increment=Patch /config branches.main.is-release-branch=true /config branches.develop.tag=alpha /config branches.develop.increment=Minor /config branches.feature.tag=beta /config branches.feature.increment=None /config branches.hotfix.tag=beta /config branches.hotfix.increment=Patch'
 
   build-and-test:
     runs-on: ubuntu-latest
@@ -132,14 +130,9 @@ jobs:
       run: dotnet restore
 
     - name: Build solution
-      run: dotnet build --no-restore --configuration ${{ inputs.build-configuration }}
+      run: dotnet build --no-restore --configuration ${{ inputs.build-configuration }} -p:Version=${{ needs.version.outputs.version }}
 
-    - name: Pack Release NuGet packages
-      if: ${{ needs.version.outputs.is-release == 'true' }}
-      run: dotnet pack --no-build --configuration ${{ inputs.build-configuration }} --output ./artifacts -p:PackageVersion=${{ needs.version.outputs.nuget-version }}
-
-    - name: Pack Prerelease NuGet packages
-      if: ${{ needs.version.outputs.is-prerelease == 'true' }}
+    - name: Pack NuGet packages
       run: dotnet pack --no-build --configuration ${{ inputs.build-configuration }} --output ./artifacts -p:PackageVersion=${{ needs.version.outputs.nuget-version }}
 
     - name: Publish Release to GitHub Packages
@@ -173,4 +166,4 @@ jobs:
         tag_name: v${{ needs.version.outputs.version }}
         release_name: Release v${{ needs.version.outputs.version }}
         draft: false
-        prerelease: false
+        prerelease: false     
