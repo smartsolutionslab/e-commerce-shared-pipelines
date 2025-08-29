@@ -77,12 +77,11 @@ jobs:
     - name: Determine Version
       id: gitversion
       uses: gittools/actions/gitversion/execute@v0
-      with:
-        additionalArguments: '/config mode=ContinuousDelivery /config branches.main.tag= /config branches.main.increment=Patch /config branches.main.is-release-branch=true /config branches.develop.tag=alpha /config branches.develop.increment=Minor /config branches.feature.tag=beta /config branches.feature.increment=None /config branches.hotfix.tag=beta /config branches.hotfix.increment=Patch'
 
   setup-nuget:
     runs-on: ubuntu-latest
     if: ${{ inputs.requires-github-packages }}
+    
     steps:
     - name: Checkout code
       uses: actions/checkout@v4
@@ -298,7 +297,7 @@ jobs:
     - name: Deploy ${{ inputs.service-name }} to Development
       run: |
         echo "🚀 Deploying ${{ inputs.service-name }} to Development"
-        echo "Image: ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:develop-${{ github.sha }}"
+        echo "Image: ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:${{ needs.version.outputs.docker-tag }}"
 
   deploy-prod:
     runs-on: ubuntu-latest  
@@ -311,3 +310,8 @@ jobs:
       run: |
         echo "🚀 Deploying ${{ inputs.service-name }} to Production"
         echo "Image: ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:latest"
+        push: true
+        tags: ${{ steps.meta.outputs.tags }}
+        labels: ${{ steps.meta.outputs.labels }}
+        cache-from: type=gha
+        cache-to: type=gha,mode=max
