@@ -17,7 +17,7 @@ Reference these workflows in your repository:
 ```yaml
 jobs:
   ci:
-    uses: your-org/e-commerce-shared-pipelines/.github/workflows/dotnet-ci.yml@main
+    uses: smartsolutionslab/e-commerce-shared-pipelines/.github/workflows/dotnet-ci.yml@main
     with:
       dotnet-version: '9.0.x'
       run-tests: true
