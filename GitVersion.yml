@@ -1,0 +1,22 @@
+# Diese Datei kann gelöscht werden - Pipeline verwendet jetzt inline Konfiguration
+branches:
+  main:
+    regex: ^main$
+    tag: ''
+    increment: Patch
+    is-release-branch: true
+  develop:
+    regex: ^develop$
+    tag: alpha
+    increment: Minor
+    is-release-branch: false
+  feature:
+    regex: ^feature[/-]
+    tag: beta
+    increment: None
+    is-release-branch: false
+  hotfix:
+    regex: ^hotfix[/-]
+    tag: beta
+    increment: Patch
+    is-release-branch: false
