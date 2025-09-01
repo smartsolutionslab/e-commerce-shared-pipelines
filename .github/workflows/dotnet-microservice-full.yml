@@ -132,10 +132,6 @@ jobs:
     needs: base-pipeline
     if: ${{ inputs.build-docker && github.event_name == 'push' }}
     
-    permissions:
-      contents: read
-      packages: write
-
     steps:
     - name: Checkout code
       uses: actions/checkout@v5
@@ -218,6 +214,10 @@ jobs:
       env:
         GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           --title "Release v${{ needs.base-pipeline.outputs.version }}" \
+          --notes "Auto-generated release for ${{ inputs.service-name }}" \
+          --generate-notes
+      env:
+        GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           --notes "Auto-generated release for ${{ inputs.service-name }}" \
           --generate-notes
       env:

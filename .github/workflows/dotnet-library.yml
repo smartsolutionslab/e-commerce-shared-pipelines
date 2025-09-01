@@ -47,10 +47,6 @@ jobs:
     needs: base-pipeline
     if: ${{ inputs.publish-nuget && github.event_name == 'push' }}
     
-    permissions:
-      contents: read
-      packages: write
-
     steps:
     - name: Checkout code
       uses: actions/checkout@v5
@@ -68,8 +64,10 @@ jobs:
 
     - name: Pack NuGet packages
       run: |
-        VERSION="${{ needs.base-pipeline.outputs.version }}"
-        echo "Using version: $VERSION"
+        VERSION="${{ needs.base-pipeline.outputs.nuget-version }}"
+        if [ -z "$VERSION" ]; then
+          VERSION="${{ needs.base-pipeline.outputs.version }}"
+        fi
         dotnet pack --no-build --configuration ${{ inputs.build-configuration }} --output ./artifacts -p:PackageVersion="$VERSION"
 
     - name: Publish to GitHub Packages
