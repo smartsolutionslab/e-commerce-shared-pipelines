@@ -162,7 +162,7 @@ jobs:
       with:
         images: ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}
         tags: |
-          type=raw,value=${{ needs.version.outputs.docker-tag }}
+          type=raw,value=${{ needs.base-pipeline.outputs.version }}
           type=raw,value=latest,enable={{is_default_branch}}
 
     - name: Build and push Docker image
@@ -186,7 +186,7 @@ jobs:
     - name: Deploy ${{ inputs.service-name }} to Development
       run: |
         echo "🚀 Deploying ${{ inputs.service-name }} to Development"
-        echo "Image: ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:${{ needs.version.outputs.docker-tag }}"
+        echo "Image: ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:${{ needs.base-pipeline.outputs.version }}"
 
   deploy-prod:
     runs-on: ubuntu-latest  
@@ -199,11 +199,6 @@ jobs:
       run: |
         echo "🚀 Deploying ${{ inputs.service-name }} to Production"
         echo "Image: ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:latest"
-        push: true
-        tags: ${{ steps.meta.outputs.tags }}
-        labels: ${{ steps.meta.outputs.labels }}
-        cache-from: type=gha
-        cache-to: type=gha,mode=max
 
   create-release:
     runs-on: ubuntu-latest
@@ -222,4 +217,8 @@ jobs:
           --generate-notes
       env:
         GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-    
+          --title "Release v${{ needs.base-pipeline.outputs.version }}" \
+          --notes "Auto-generated release for ${{ inputs.service-name }}" \
+          --generate-notes
+      env:
+        GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
