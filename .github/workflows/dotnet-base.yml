@@ -36,7 +36,6 @@ jobs:
     runs-on: ubuntu-latest
     outputs:
       version: ${{ steps.gitversion.outputs.semVer }}
-      nuget-version: ${{ steps.gitversion.outputs.nuGetVersionV2 }}
       is-release: ${{ steps.gitversion.outputs.branchName == 'main' }}
     
     steps:
@@ -64,7 +63,27 @@ jobs:
 
     - name: Setup authenticated nuget.config
       run: |
-        # ...existing nuget.config setup...
+        if [ -f "nuget.config" ]; then
+          sed -i "s/YOUR_USERNAME/${{ github.repository_owner }}/g" nuget.config
+          sed -i "s/USERNAME_PLACEHOLDER/${{ github.actor }}/g" nuget.config
+          sed -i "s/TOKEN_PLACEHOLDER/${{ secrets.GITHUB_TOKEN }}/g" nuget.config
+        else
+          cat > nuget.config << EOF
+        <?xml version="1.0" encoding="utf-8"?>
+        <configuration>
+          <packageSources>
+            <add key="nuget.org" value="https://api.nuget.org/v3/index.json" protocolVersion="3" />
+            <add key="github" value="https://nuget.pkg.github.com/${{ github.repository_owner }}/index.json" />
+          </packageSources>
+          <packageSourceCredentials>
+            <github>
+              <add key="Username" value="${{ github.actor }}" />
+              <add key="ClearTextPassword" value="${{ secrets.GITHUB_TOKEN }}" />
+            </github>
+          </packageSourceCredentials>
+        </configuration>
+        EOF
+        fi
 
     - name: Upload nuget.config artifact
       uses: actions/upload-artifact@v4

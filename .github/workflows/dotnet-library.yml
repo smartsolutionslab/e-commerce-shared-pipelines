@@ -47,10 +47,6 @@ jobs:
     needs: base-pipeline
     if: ${{ inputs.publish-nuget && github.event_name == 'push' }}
     
-    permissions:
-      contents: read
-      packages: write
-
     steps:
     - name: Checkout code
       uses: actions/checkout@v5
@@ -64,28 +60,17 @@ jobs:
       run: dotnet restore
 
     - name: Build solution
-      run: dotnet build --no-restore --configuration ${{ inputs.build-configuration }} -p:Version=${{ needs.version.outputs.version }}
+      run: dotnet build --no-restore --configuration ${{ inputs.build-configuration }} -p:Version=${{ needs.base-pipeline.outputs.version }}
 
     - name: Pack NuGet packages
       run: |
-        VERSION="${{ needs.version.outputs.nuget-version }}"
+        VERSION="${{ needs.base-pipeline.outputs.nuget-version }}"
         if [ -z "$VERSION" ]; then
-          VERSION="${{ needs.version.outputs.version }}"
-          echo "Using fallback version: $VERSION"
-        else
-          echo "Using NuGet version: $VERSION"
+          VERSION="${{ needs.base-pipeline.outputs.version }}"
         fi
         dotnet pack --no-build --configuration ${{ inputs.build-configuration }} --output ./artifacts -p:PackageVersion="$VERSION"
 
-    - name: Publish Release to GitHub Packages
-      if: ${{ needs.version.outputs.is-release == 'true' }}
-      run: |
-        for file in ./artifacts/*.nupkg; do
-          dotnet nuget push "$file" --source ${{ inputs.nuget-source }} --api-key ${{ secrets.GITHUB_TOKEN }}
-        done
-
-    - name: Publish Prerelease to GitHub Packages
-      if: ${{ needs.version.outputs.is-prerelease == 'true' }}
+    - name: Publish to GitHub Packages
       run: |
         for file in ./artifacts/*.nupkg; do
           dotnet nuget push "$file" --source ${{ inputs.nuget-source }} --api-key ${{ secrets.GITHUB_TOKEN }}
