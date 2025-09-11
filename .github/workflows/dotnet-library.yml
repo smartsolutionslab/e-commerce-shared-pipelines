@@ -49,10 +49,10 @@ jobs:
     
     steps:
     - name: Checkout code
-      uses: actions/checkout@v5
+      uses: actions/checkout@v4.1.0
 
     - name: Setup .NET
-      uses: actions/setup-dotnet@v4
+      uses: actions/setup-dotnet@v4.1.0
       with:
         dotnet-version: ${{ inputs.dotnet-version }}
 
@@ -85,6 +85,11 @@ jobs:
       contents: write
 
     steps:
+    - name: Checkout code
+      uses: actions/checkout@v4.1.0
+      with:
+        fetch-depth: 0
+
     - name: Create GitHub Release and Tag
       run: |
         gh release create v${{ needs.base-pipeline.outputs.version }} \
@@ -93,4 +98,3 @@ jobs:
           --generate-notes
       env:
         GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-        token: ${{ secrets.GITHUB_TOKEN }}

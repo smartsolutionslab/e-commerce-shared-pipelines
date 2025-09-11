@@ -27,6 +27,9 @@ on:
       version:
         description: "Semantic version"
         value: ${{ jobs.version.outputs.version }}
+      nuget-version:
+        description: "NuGet version"
+        value: ${{ jobs.version.outputs.nuget-version }}
       is-release:
         description: "Is main branch release"
         value: ${{ jobs.version.outputs.is-release }}
@@ -47,11 +50,36 @@ jobs:
     - name: Install GitVersion
       uses: gittools/actions/gitversion/setup@v4.1.0
       with:
-        versionSpec: '6.3.x'
+        versionSpec: '6.x'
+
+    - name: Create GitVersion config
+      run: |
+        cat > GitVersion.yml << EOF
+        mode: ContinuousDelivery
+        branches:
+          main:
+            regex: ^main$
+            tag: ''
+            increment: Minor
+            prevent-increment-of-merged-branch-version: true
+            is-release-branch: true
+          develop:
+            regex: ^develop$
+            tag: alpha
+            increment: Minor
+            is-release-branch: false
+          feature:
+            regex: ^feature[/-]
+            tag: beta
+            increment: None
+            is-release-branch: false
+        EOF
 
     - name: Determine Version
       id: gitversion
       uses: gittools/actions/gitversion/execute@v4.1.0
+      with:
+        useConfigFile: true
 
   setup-nuget:
     runs-on: ubuntu-latest
