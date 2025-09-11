@@ -39,7 +39,6 @@ jobs:
     runs-on: ubuntu-latest
     outputs:
       version: ${{ steps.gitversion.outputs.semVer }}
-      nuget-version: ${{ steps.gitversion.outputs.nuGetVersionV2 }}
       is-release: ${{ steps.gitversion.outputs.branchName == 'main' }}
     
     steps:
