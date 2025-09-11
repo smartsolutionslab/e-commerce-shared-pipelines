@@ -47,10 +47,6 @@ jobs:
     needs: base-pipeline
     if: ${{ inputs.publish-nuget && github.event_name == 'push' }}
     
-    permissions:
-      contents: read
-      packages: write
-
     steps:
     - name: Checkout code
       uses: actions/checkout@v4.1.0
