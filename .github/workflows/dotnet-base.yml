@@ -81,6 +81,14 @@ jobs:
       with:
         useConfigFile: true
 
+
+    - name: Debug Version Output
+      run: |
+        echo "SemVer: ${{ steps.gitversion.outputs.semVer }}"
+        echo "NuGetVersionV2: ${{ steps.gitversion.outputs.nuGetVersionV2 }}"
+        echo "Branch Name: ${{ steps.gitversion.outputs.branchName }}"
+        echo "All outputs: ${{ toJson(steps.gitversion.outputs) }}"
+
   setup-nuget:
     runs-on: ubuntu-latest
     if: ${{ inputs.requires-github-packages }}
@@ -152,7 +160,14 @@ jobs:
       run: dotnet restore
 
     - name: Build solution
-      run: dotnet build --no-restore --configuration ${{ inputs.build-configuration }} -p:Version=${{ needs.version.outputs.version }}
+      run: |
+        VERSION="${{ needs.version.outputs.version }}"
+        if [ -z "$VERSION" ] || [ "$VERSION" = "null" ]; then
+          echo "❌ Version is empty, using fallback"
+          VERSION="1.0.0-dev"
+        fi
+        echo "Using version: $VERSION"
+        dotnet build --no-restore --configuration ${{ inputs.build-configuration }} -p:Version="$VERSION"
 
     - name: Run unit tests
       if: ${{ inputs.run-tests }}
